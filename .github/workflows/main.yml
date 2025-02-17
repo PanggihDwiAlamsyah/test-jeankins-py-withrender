@@ -1,0 +1,57 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main  # Jalankan saat ada push ke branch main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3.11 python3.11-dev python3.11-venv python3-pip build-essential
+
+      - name: Create Virtual Environment
+        run: |
+          python3 -m venv venv
+
+      - name: Install Python Packages
+        run: |
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install pytest pyinstaller
+
+      - name: Compile Python Files
+        run: |
+          venv/bin/python -m py_compile sources/add2vals.py sources/calc.py
+        continue-on-error: true  # Jika ada error, pipeline tetap lanjut
+
+      - name: Run Tests
+        run: |
+          venv/bin/pytest --junit-xml test-reports/results.xml sources/test_calc.py
+        continue-on-error: true
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-reports
+          path: test-reports/results.xml
+
+      - name: Deploy to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+          -H "Accept: application/json" \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
